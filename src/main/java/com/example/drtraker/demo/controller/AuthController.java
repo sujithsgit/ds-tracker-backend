@@ -15,13 +15,13 @@ import java.util.*;
 public class AuthController {
     private final AuthService authService;
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository; // ✅ add
+    private final UserRepository userRepository;
 
     public AuthController(AuthService authService, JwtUtil jwtUtil,
-                          UserRepository userRepository) { // ✅ add
+                          UserRepository userRepository) { 
         this.authService = authService;
         this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository; // ✅ add
+        this.userRepository = userRepository; 
     }
 
     @PostMapping("/login")
@@ -29,20 +29,20 @@ public class AuthController {
         return authService.login(request);
     }
 
-    // ✅ Refresh token validate பண்ணி new access token தரு
+
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@RequestBody Map<String, String> body) {
         try {
             String refreshToken = body.get("refreshToken");
 
-            // ✅ Token validate பண்ணு
+     
             if (!jwtUtil.validateToken(refreshToken)) {
                 return ResponseEntity.status(401).body("Refresh token expired");
             }
 
             String email = jwtUtil.extractUsername(refreshToken);
 
-            // ✅ DB-ல refresh token match பண்ணு
+      
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -50,7 +50,7 @@ public class AuthController {
                 return ResponseEntity.status(401).body("Invalid refresh token");
             }
 
-            // ✅ New access token generate பண்ணு
+     
             String newAccessToken = jwtUtil.generateAccessToken(email);
 
             return ResponseEntity.ok(new AuthResponse(newAccessToken, refreshToken));

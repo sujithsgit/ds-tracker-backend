@@ -24,23 +24,23 @@ public class CheckInService {
 
     public String checkIn(Long resolutionId, CheckinRequest request) {
 
-        // 1. Resolution எடு
+     
         Resolution resolution = resolutionRepository.findById(resolutionId)
                 .orElseThrow(() -> new RuntimeException("Resolution not found"));
 
         LocalDate today = LocalDate.now();
 
-        // 2. Today's log எடு
+   
         ResolutionLog log = logRepository
                 .findByResolutionAndDate(resolution, today)
                 .orElseThrow(() -> new RuntimeException("Log not found for today"));
 
-        // 3. Already done/skipped-ஆ check பண்ணு
+      
         if ("DONE".equals(log.getStatus()) || "SKIPPED".equals(log.getStatus())) {
             return "Already checked in for today";
         }
 
-        // 4. Status update பண்ணு
+
         log.setStatus(request.getStatus()); // DONE or SKIPPED
         logRepository.save(log);
 

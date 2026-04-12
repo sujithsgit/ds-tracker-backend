@@ -46,9 +46,15 @@ public class DashboardService {
 
         LocalDate today = LocalDate.now();
 
+      
+        Map<Long, List<ResolutionLog>> logsCache = new HashMap<>();
+        for (Resolution res : resolutions) {
+            logsCache.put(res.getId(), logRepository.findByResolutionOrderByDateAsc(res));
+        }
+
         // Latest resolution — main card
         Resolution latest = resolutions.get(0);
-        List<ResolutionLog> latestLogs = logRepository.findByResolutionOrderByDateAsc(latest);
+        List<ResolutionLog> latestLogs = logsCache.get(latest.getId());
 
         int daysCompleted = calculateDaysCompleted(latestLogs);
         int daysRemaining = (int) Math.max(0, ChronoUnit.DAYS.between(today, latest.getEndDate()));
@@ -62,38 +68,34 @@ public class DashboardService {
 
         // All resolutions — modal
         List<DashboardResponse.ResolutionDto> resolutionDtos = resolutions.stream().map(res -> {
-            List<ResolutionLog> resLogs = logRepository.findByResolutionOrderByDateAsc(res);
-
-            int completed = calculateDaysCompleted(resLogs);
-            int remaining = (int) Math.max(0, ChronoUnit.DAYS.between(today, res.getEndDate()));
-            String status = getTodayStatus(resLogs, today);
-            int resStreak = calculateStreak(resLogs, today, status);
+            List<ResolutionLog> resLogs = logsCache.get(res.getId());
 
             DashboardResponse.ResolutionDto dto = new DashboardResponse.ResolutionDto();
             dto.setId(res.getId());
             dto.setTitle(res.getTitle());
             dto.setDurationDays(res.getDurationDays());
-            dto.setDaysCompleted(completed);
-            dto.setDaysRemaining(remaining);
-            dto.setTodayStatus(status);
-            dto.setStreak(resStreak);
+            dto.setDaysCompleted(calculateDaysCompleted(resLogs));
+            dto.setDaysRemaining((int) Math.max(0, ChronoUnit.DAYS.between(today, res.getEndDate())));
+            dto.setTodayStatus(getTodayStatus(resLogs, today));
+            dto.setStreak(calculateStreak(resLogs, today, getTodayStatus(resLogs, today)));
 
             return dto;
         }).collect(Collectors.toList());
 
-        // ✅ Calendar — all resolutions logs combine பண்ணு
-        Map<String, List<String>> dateStatusMap = new HashMap<>();
+        // ✅ Calendar — date → statuses + resolution breakdown
+        Map<String, List<String>> dateStatusMap = new LinkedHashMap<>();
+        Map<String, List<DashboardResponse.CalendarResolutionDto>> dateResolutionMap = new LinkedHashMap<>();
 
         for (Resolution res : resolutions) {
-            List<ResolutionLog> resLogs = logRepository.findByResolutionOrderByDateAsc(res);
+            List<ResolutionLog> resLogs = logsCache.get(res.getId());
             for (ResolutionLog log : resLogs) {
                 String date = log.getDate().toString();
                 dateStatusMap.computeIfAbsent(date, k -> new ArrayList<>()).add(log.getStatus());
+                dateResolutionMap.computeIfAbsent(date, k -> new ArrayList<>())
+                    .add(new DashboardResponse.CalendarResolutionDto(res.getTitle(), log.getStatus()));
             }
         }
 
-        // ✅ Each date-ஓட combined status calculate
-     // ✅ Calendar build — resolution breakdown include
         List<DashboardResponse.CalendarDto> calendarDtos = dateStatusMap.entrySet().stream()
             .map(entry -> {
                 String date = entry.getKey();
@@ -109,19 +111,10 @@ public class DashboardService {
                 else if (allSkipped) combinedStatus = "SKIPPED";
                 else combinedStatus = "PARTIAL";
 
-                // ✅ That day-ஓட resolution breakdown
-                List<DashboardResponse.CalendarResolutionDto> resolutionBreakdown = new ArrayList<>();
-                for (Resolution res : resolutions) {
-                    List<ResolutionLog> resLogs = logRepository.findByResolutionOrderByDateAsc(res);
-                    resLogs.stream()
-                        .filter(l -> l.getDate().toString().equals(date))
-                        .findFirst()
-                        .ifPresent(l -> resolutionBreakdown.add(
-                            new DashboardResponse.CalendarResolutionDto(res.getTitle(), l.getStatus())
-                        ));
-                }
+                List<DashboardResponse.CalendarResolutionDto> dayResolutions =
+                    dateResolutionMap.getOrDefault(date, new ArrayList<>());
 
-                return new DashboardResponse.CalendarDto(date, combinedStatus, resolutionBreakdown);
+                return new DashboardResponse.CalendarDto(date, combinedStatus, dayResolutions);
             })
             .sorted(Comparator.comparing(DashboardResponse.CalendarDto::getDate))
             .collect(Collectors.toList());
@@ -141,7 +134,7 @@ public class DashboardService {
         response.setBestStreak(bestStreak);
         response.setLogs(logDtos);
         response.setResolutions(resolutionDtos);
-        response.setCalendarLogs(calendarDtos); // ✅ calendar
+        response.setCalendarLogs(calendarDtos); // ✅
 
         return response;
     }
